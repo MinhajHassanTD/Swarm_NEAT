@@ -89,10 +89,11 @@ class Agent:
             dx, dy, is_big, dist = nearest_food
             max_dist = max(self.maze.cols, self.maze.rows, 10)
             
-            # Scale by much higher value to make food direction overwhelmingly clear
-            # This helps prevent oscillation near walls by making one direction clearly best
-            dx_norm = math.tanh(dx * 15.0 / max_dist)
-            dy_norm = math.tanh(dy * 15.0 / max_dist)
+            # Much stronger scaling to make food direction signal very clear
+            # Higher value = stronger signal, especially for nearby food
+            # This helps network learn to move toward food efficiently
+            dx_norm = math.tanh(dx * 20.0 / max_dist)
+            dy_norm = math.tanh(dy * 20.0 / max_dist)
             is_big_norm = 1.0 if is_big else 0.0
         else:
             # No food available
@@ -162,10 +163,10 @@ class Agent:
             food['eaten'] = True
             if food['big']:
                 self.collected_big += 1
-                self.energy = min(self.max_energy, self.energy + 60.0)
+                self.energy = min(self.max_energy, self.energy + 70.0)
             else:
                 self.collected_small += 1
-                self.energy = min(self.max_energy, self.energy + 30.0)
+                self.energy = min(self.max_energy, self.energy + 35.0)
     
     def is_starving(self):
         """Check if agent has critically low energy."""
