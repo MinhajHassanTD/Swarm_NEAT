@@ -145,11 +145,11 @@ def draw_hud(surface, generation, best_fitness, avg_fitness, global_best_fitness
     surface.blit(text, (legend_x + 20, y_offset + 35))
     
     pygame.draw.circle(surface, YELLOW, (legend_x + 10, y_offset + 55), 3)
-    text = tiny_font.render("= Small (+15 energy)", True, WHITE)
+    text = tiny_font.render("= Small (+35 energy)", True, WHITE)
     surface.blit(text, (legend_x + 20, y_offset + 50))
     
     pygame.draw.circle(surface, RED, (legend_x + 10, y_offset + 70), 5)
-    text = tiny_font.render("= Big (+30 energy)", True, WHITE)
+    text = tiny_font.render("= Big (+70 energy)", True, WHITE)
     surface.blit(text, (legend_x + 20, y_offset + 65))
     
     text = tiny_font.render("Press Q to quit", True, LIGHT_GRAY)

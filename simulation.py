@@ -8,19 +8,12 @@ import pickle
 from maze import Maze, DEFAULT_MAZE
 from agent import Agent
 from visualize import draw_maze, draw_food, draw_all_agents, draw_hud
+from fitness import compute_fitness
 
 # Simulation parameters
-MAX_STEPS = 200
-FPS = 15
+MAX_STEPS = 400
+FPS = 20
 
-# Fitness reward values
-SMALL_FOOD_REWARD = 150.0
-BIG_FOOD_REWARD = 300.0
-COMPLETION_BONUS = 200.0
-EXPLORATION_REWARD = 30.0
-SURVIVAL_REWARD = 50.0
-#penalties
-COLLISION_PENALTY_WEIGHT = 4.0
 # Global tracking across generations
 generation_counter = 0
 global_best_fitness = 0.0
@@ -37,11 +30,13 @@ def eval_genomes(genomes, config):
     global generation_counter, global_best_fitness, global_best_genome
     
     gen_start_time = time.time()
-    maze = Maze(DEFAULT_MAZE, cell_size=20)
+    
+    # Create master maze for display
+    master_maze = Maze(DEFAULT_MAZE, cell_size=20)
     
     # Initialize Pygame display
-    screen_width = maze.cols * maze.cell_size
-    screen_height = maze.rows * maze.cell_size + 120
+    screen_width = master_maze.cols * master_maze.cell_size
+    screen_height = master_maze.rows * master_maze.cell_size + 120
     screen = pygame.display.get_surface()
     
     if screen is None:
@@ -50,7 +45,7 @@ def eval_genomes(genomes, config):
     
     clock = pygame.time.Clock()
     
-    # Create agents for each genome
+    # Create agents for each genome (with independent maze instances)
     nets = []
     agents = []
     ge = []
@@ -62,8 +57,13 @@ def eval_genomes(genomes, config):
     
     for idx, (genome_id, genome) in enumerate(genomes):
         genome.fitness = 0.0
-        net = neat.nn.FeedForwardNetwork.create(genome, config)
-        agent = Agent(maze, net, genome_id, MAX_STEPS)
+        
+        # Create RecurrentNetwork instead of FeedForwardNetwork
+        net = neat.nn.RecurrentNetwork.create(genome, config)
+        
+        # Each agent gets its own maze instance with independent food
+        agent_maze = master_maze.copy_with_fresh_food()
+        agent = Agent(agent_maze, net, genome_id, MAX_STEPS)
         agent.color = agent_colors[idx % len(agent_colors)]
         
         nets.append(net)
@@ -90,28 +90,27 @@ def eval_genomes(genomes, config):
             
             active_agents += 1
             
-            # Get sensor inputs
+            # Get sensor inputs (now 11 inputs)
             inputs = agent.get_inputs()
             
-            # Network decides direction
+            # Network decides direction (now 5 outputs including stay)
             output = nets[i].activate(inputs)
             direction_idx = output.index(max(output))
             
             # Execute movement
             agent.step(direction_idx)
         
-        # Render current state
+        # Render current state (use master_maze for visualization)
         screen.fill((40, 40, 40))
-        draw_maze(screen, maze)
-        draw_food(screen, maze)
-        draw_all_agents(screen, agents, maze)
+        draw_maze(screen, master_maze)
+        draw_food(screen, master_maze)
+        draw_all_agents(screen, agents, master_maze)
         
         # Calculate display metrics
         current_fitnesses = []
-        for i, agent in enumerate(agents):
-            display_fitness = 0.0
-            display_fitness += agent.collected_small * SMALL_FOOD_REWARD
-            display_fitness += agent.collected_big * BIG_FOOD_REWARD
+        for agent in agents:
+            # Use new fitness function for display
+            display_fitness = compute_fitness(agent, agent.maze, generation_counter)
             current_fitnesses.append(display_fitness)
         
         best_fitness = max(current_fitnesses) if current_fitnesses else 0
@@ -127,42 +126,13 @@ def eval_genomes(genomes, config):
         pygame.display.flip()
         clock.tick(FPS)
         
-        # Stop early if all agents died or maze completed
+        # Stop early if all agents died
         if active_agents == 0:
             break
-        
-        if any(a.collected_small + a.collected_big == len(maze.food_items) for a in agents):
-            break
     
-    # Calculate final fitness for each genome
+    # Calculate final fitness for each genome using new fitness function
     for i, agent in enumerate(agents):
-        fitness = 0.0
-        
-        # Reward food collection
-        fitness += agent.collected_small * SMALL_FOOD_REWARD
-        fitness += agent.collected_big * BIG_FOOD_REWARD
-        
-        # Reward exploration progress
-        exploration_score = agent.get_exploration_score()
-        fitness += exploration_score * EXPLORATION_REWARD
-        # Penalize collisions
-        fitness -= agent.collisions * COLLISION_PENALTY_WEIGHT
-        
-        
-        # Reward survival with remaining energy
-        if agent.alive and agent.energy > 0:
-            energy_ratio = agent.energy / agent.max_energy
-            fitness += SURVIVAL_REWARD * energy_ratio
-        
-        # Bonus for completing maze
-        total_food = len(maze.food_items)
-        if agent.collected_small + agent.collected_big == total_food:
-            fitness += COMPLETION_BONUS
-            
-            # Extra bonus for efficient completion
-            efficiency = (MAX_STEPS - agent.steps) / MAX_STEPS
-            fitness += efficiency * 50.0
-        
+        fitness = compute_fitness(agent, agent.maze, generation_counter)
         ge[i].fitness = max(0.0, fitness)
     
     # Track best genome across all generations
@@ -190,4 +160,3 @@ def eval_genomes(genomes, config):
           f"Collisions={best_agent.collisions}")
     
     generation_counter += 1
-    maze.reset_food()

@@ -1,6 +1,7 @@
 """
 Maze environment with walls and food items.
 """
+import copy
 
 class Maze:
     def __init__(self, layout, cell_size=40):
@@ -46,6 +47,20 @@ class Maze:
         
         if self.start_pos is None:
             raise ValueError("Maze must have a start position 'S'")
+    
+    def copy_with_fresh_food(self):
+        """Create a new maze instance with independent food state."""
+        new_maze = Maze.__new__(Maze)
+        new_maze.layout = self.layout  # Shared (immutable)
+        new_maze.cell_size = self.cell_size
+        new_maze.rows = self.rows
+        new_maze.cols = self.cols
+        new_maze.start_pos = self.start_pos
+        
+        # Deep copy food items so each agent has independent food
+        new_maze.food_items = copy.deepcopy(self.food_items)
+        
+        return new_maze
     
     def is_wall(self, grid_x, grid_y):
         """Check if given grid position is a wall."""
