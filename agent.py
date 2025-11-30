@@ -18,7 +18,7 @@ class Agent:
         self.maze = maze
         self.net = net
         self.genome_id = genome_id
-        self.max_steps = max_steps
+        self.max_steps = max(max_steps, 1)  # ⭐ FIX: Prevent division by zero
         
         # Position in grid coordinates
         self.gx, self.gy = maze.start_pos
@@ -27,7 +27,7 @@ class Agent:
         self.energy = 100.0
         self.max_energy = 100.0
         self.energy_per_step = 0.5
-        self.energy_per_collision = 2.0
+        self.energy_per_collision = 5.0
         
         # Performance tracking
         self.steps = 0
@@ -44,6 +44,9 @@ class Agent:
         self.initial_distance_to_food = None
         self.min_distance_to_food = float('inf')
         self.last_distance_to_food = float('inf')
+        
+        # Track visited positions for revisit detection
+        self.visited_positions = {(self.gx, self.gy): 1}
         
         # Validate starting position
         if self.maze.is_wall(self.gx, self.gy):
@@ -62,7 +65,7 @@ class Agent:
         distance = 0
         x, y = self.gx, self.gy
         
-        max_dist = max(self.maze.rows, self.maze.cols)
+        max_dist = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
         
         while distance < max_dist:
             if direction == 0:  # up
@@ -92,7 +95,8 @@ class Agent:
         dy = target_y - self.gy
         magnitude = math.sqrt(dx**2 + dy**2)
         
-        if magnitude == 0:
+        # ⭐ FIX: Prevent division by zero
+        if magnitude < 0.001:
             return (0.0, 0.0)
         
         return (dx / magnitude, dy / magnitude)
@@ -111,8 +115,12 @@ class Agent:
         nearest_food = None
         min_dist = float('inf')
         
+        # ⭐ SAFETY: Check maze has food_items
+        if not hasattr(self.maze, 'food_items') or self.maze.food_items is None:
+            return None
+        
         for food in self.maze.food_items:
-            if not food['eaten']:
+            if not food.get('eaten', False):
                 dist = self.get_manhattan_distance(food['grid_x'], food['grid_y'])
                 
                 if dist < min_dist:
@@ -121,25 +129,32 @@ class Agent:
         
         return nearest_food
     
+    def get_revisit_indicator(self):
+        """
+        Calculate how many times current position has been visited.
+        Returns normalized value (0.0 = new, 1.0 = heavily revisited).
+        """
+        visit_count = self.visited_positions.get((self.gx, self.gy), 0)
+        # Normalize: 0 visits = 0.0, 5+ visits = 1.0
+        return min(visit_count / 5.0, 1.0)
+    
     def get_inputs(self):
         """
-        Build 11-dimensional input vector for the neural network.
+        Build 12-dimensional input vector for the neural network.
         
         Returns:
-            list: 11 normalized inputs:
+            list: 12 normalized inputs:
                 0-3: Distance to walls (up, down, left, right) normalized
                 4-5: Unit vector to nearest food (dx, dy)
                 6: Distance to nearest food (normalized)
                 7: Food size (1.0 if big, 0.0 if small)
                 8: Energy critical flag (1.0 if < 30%)
                 9: Energy healthy flag (1.0 if > 60%)
-                10: Bias (1.0)
+                10: Revisit indicator (0.0 = new, 1.0 = been here a lot)
+                11: Bias (1.0)
         """
         # Calculate distances to walls (normalized)
-        max_dimension = max(self.maze.rows, self.maze.cols)
-        
-        if max_dimension == 0:
-            max_dimension = 1  # Prevent division by zero
+        max_dimension = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
         
         distance_up = min(self.get_distance_to_wall(0) / max_dimension, 1.0)
         distance_down = min(self.get_distance_to_wall(1) / max_dimension, 1.0)
@@ -161,22 +176,23 @@ class Agent:
                 nearest_food['grid_x'],
                 nearest_food['grid_y']
             )
-            max_distance = self.maze.cols + self.maze.rows
-            if max_distance == 0:
-                max_distance = 1
+            max_distance = max(self.maze.cols + self.maze.rows, 1)  # ⭐ FIX: Ensure > 0
             food_distance_norm = min(food_distance / max_distance, 1.0)
             
             # Food size
-            food_size = 1.0 if nearest_food['big'] else 0.0
+            food_size = 1.0 if nearest_food.get('big', False) else 0.0
         else:
             food_direction = (0.0, 0.0)
             food_distance_norm = 1.0
             food_size = 0.0
         
         # Energy state flags
-        energy_ratio = self.energy / self.max_energy if self.max_energy > 0 else 0.0
+        energy_ratio = self.energy / max(self.max_energy, 1.0)  # ⭐ FIX: Prevent division by zero
         energy_critical = 1.0 if energy_ratio < 0.3 else 0.0
         energy_healthy = 1.0 if energy_ratio > 0.6 else 0.0
+        
+        # Revisit indicator
+        revisit_indicator = self.get_revisit_indicator()
         
         return [
             distance_up,
@@ -189,6 +205,7 @@ class Agent:
             food_size,
             energy_critical,
             energy_healthy,
+            revisit_indicator,
             1.0  # bias
         ]
     
@@ -213,6 +230,7 @@ class Agent:
         if direction_index == 4:
             # Stay in place - no movement energy cost
             self.trajectory.append((self.gx, self.gy))
+            self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
             return
         
         # Deduct movement energy
@@ -238,6 +256,7 @@ class Agent:
             
             # Record failed attempt in trajectory
             self.trajectory.append((self.gx, self.gy))
+            self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
             
             if self.energy <= 0:
                 self.alive = False
@@ -247,11 +266,14 @@ class Agent:
         self.gx, self.gy = new_gx, new_gy
         self.trajectory.append((self.gx, self.gy))
         
+        # Track visit to new position
+        self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
+        
         # Check for food collection
         food = self.maze.get_food_at(self.gx, self.gy)
         if food:
             food['eaten'] = True
-            if food['big']:
+            if food.get('big', False):
                 self.collected_big += 1
                 self.energy = min(self.max_energy, self.energy + 70.0)
             else:
@@ -275,6 +297,6 @@ class Agent:
             return 0.0
         
         improvement = self.initial_distance_to_food - self.min_distance_to_food
-        max_possible = self.initial_distance_to_food
+        max_possible = max(self.initial_distance_to_food, 1)  # ⭐ FIX: Prevent division by zero
         
         return max(0.0, improvement / max_possible)
