@@ -7,6 +7,8 @@ import neat
 import pygame
 import pickle
 from simulation import eval_genomes
+from adaptive_mutation import inject_diversity
+from simulation import stagnation_counter
 
 def run_neat(config_path, num_generations=50, resume=False):
     """Run NEAT evolution."""
@@ -52,8 +54,16 @@ def run_neat(config_path, num_generations=50, resume=False):
         print(f"  Population: {config.pop_size} | Generations: {num_generations}")
         print(f"{'='*70}\n")
         
-        # Run evolution
-        population.run(eval_genomes, num_generations)
+        # ⭐ RUN WITH DIVERSITY INJECTION SUPPORT
+        for gen in range(num_generations):
+            population.run(eval_genomes, 1)
+            
+            # Check diversity injection flag
+            import simulation
+            if simulation.stagnation_counter.get('diversity_injection_needed', False):
+                population = inject_diversity(population, config, simulation.generation_counter)
+                simulation.stagnation_counter['diversity_injection_needed'] = False
+                simulation.stagnation_counter['count'] = 0
         
         winner = population.best_genome
         

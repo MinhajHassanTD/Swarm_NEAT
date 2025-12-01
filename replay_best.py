@@ -1,5 +1,5 @@
 """
-Replay best genome - SIMPLIFIED VERSION
+Replay best genome - Uses fitness_v3 for consistency
 """
 import os
 import sys
@@ -10,7 +10,7 @@ import time
 from maze import Maze, DEFAULT_MAZE
 from agent import Agent
 from visualize import draw_maze, draw_food, draw_agent, draw_hud
-from fitness import compute_fitness
+from fitness_v3 import compute_fitness_v3  # ⭐ USE V3
 
 def replay_genome(genome, config, num_runs=3, max_steps=400, fps=10):
     """Replay trained genome."""
@@ -61,7 +61,8 @@ def replay_genome(genome, config, num_runs=3, max_steps=400, fps=10):
             draw_food(screen, maze)
             draw_agent(screen, agent, maze)
             
-            fitness = compute_fitness(agent, maze, 999)
+            # ⭐ USE V3 (generation 999 for replay mode)
+            fitness = compute_fitness_v3(agent, maze, 999)
             elapsed = time.time() - run_start
             
             draw_hud(screen, 999, fitness, fitness, fitness,
