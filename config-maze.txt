@@ -57,7 +57,7 @@ node_delete_prob        = 0.2
 
 # network parameters
 num_hidden              = 0
-num_inputs              = 12
+num_inputs              = 13
 num_outputs             = 5
 
 # node response options
@@ -72,18 +72,18 @@ response_replace_rate   = 0.0
 # connection weight options
 weight_init_mean        = 0.0
 weight_init_stdev       = 1.0
-weight_max_value        = 8.0
-weight_min_value        = -8.0
-weight_mutate_power     = 0.5
-weight_mutate_rate      = 0.8
-weight_replace_rate     = 0.1
+weight_max_value        = 5.0
+weight_min_value        = -5.0
+weight_mutate_power     = 0.8
+weight_mutate_rate      = 0.9
+weight_replace_rate     = 0.15
 
 [DefaultSpeciesSet]
 compatibility_threshold = 3.0
 
 [DefaultStagnation]
 species_fitness_func = max
-max_stagnation       = 20
+max_stagnation       = 15
 species_elitism      = 2
 
 [DefaultReproduction]

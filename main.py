@@ -1,12 +1,10 @@
 """
-Main entry point - SIMPLIFIED VERSION
+Main entry point with adaptive curriculum
 """
+import neat
 import os
 import sys
-import neat
-import pygame
-import pickle
-from simulation import eval_genomes
+import simulation
 
 def run_neat(config_path, num_generations=50, resume=False, headless=False):
     """Run NEAT evolution."""
@@ -14,38 +12,30 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False):
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_path)
     
-    # Set headless mode in simulation module
-    import simulation
     simulation.HEADLESS = headless
+    simulation.TOTAL_GENERATIONS = num_generations
     
-    # Only initialize pygame if not headless
     if not headless:
+        import pygame
         pygame.init()
-    else:
-        print("\n🚀 Running in HEADLESS mode (no visuals) - much faster!\n")
     
     if resume:
-        checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
-        if checkpoint_files:
-            checkpoint_nums = [int(f.split('-')[-1]) for f in checkpoint_files]
-            latest_gen = max(checkpoint_nums)
-            checkpoint_file = f'neat-checkpoint-{latest_gen}'
-            
-            print(f"\n✅ Restoring from {checkpoint_file}")
-            population = neat.Checkpointer.restore_checkpoint(checkpoint_file)
-            population.config = config
-            
-            import simulation
-            simulation.generation_counter = latest_gen
-        else:
-            print("\n⚠️  No checkpoints, starting fresh")
+        checkpoints = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
+        if not checkpoints:
+            print("⚠️  No checkpoints found - starting fresh\n")
             population = neat.Population(config)
+            simulation.generation_counter = 0
+        else:
+            latest = max(checkpoints, key=lambda x: int(x.split('-')[-1]))
+            population = neat.Checkpointer.restore_checkpoint(latest)
+            gen_num = int(latest.split('-')[-1])
+            simulation.generation_counter = gen_num
+            print(f"📂 Resumed from generation {gen_num}\n")
     else:
         population = neat.Population(config)
-        import simulation
         simulation.generation_counter = 0
     
-    # Add reporters
+    # ⭐ SIMPLIFIED: Remove verbose reporters
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
     
@@ -53,114 +43,83 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False):
                                       filename_prefix='neat-checkpoint-')
     population.add_reporter(checkpointer)
     
+    # ⭐ CLEAN HEADER
+    mode = "Headless" if headless else "Visual"
+    print(f"{'='*70}")
+    print(f"  NEAT Training - {mode} Mode")
+    print(f"{'='*70}")
+    print(f"  Population: {config.pop_size} │ Generations: {num_generations} │ Food: 12→3")
+    print(f"{'='*70}\n")
+    
     try:
-        print(f"\n{'='*70}")
-        print(f"  🚀 NEAT TRAINING")
-        print(f"{'='*70}")
-        print(f"  Population: {config.pop_size} | Generations: {num_generations}")
-        print(f"{'='*70}\n")
-        
-        # Run evolution
-        population.run(eval_genomes, num_generations)
-        
-        winner = population.best_genome
-        
-        with open('best_genome.pkl', 'wb') as f:
-            pickle.dump(winner, f)
+        winner = population.run(simulation.eval_genomes, num_generations)
         
         print(f"\n{'='*70}")
-        print(f"  ✅ COMPLETE!")
+        print(f"  ✅ Training Complete")
         print(f"{'='*70}")
-        print(f"  Best Fitness: {winner.fitness:.1f}")
+        print(f"  Best Fitness: {simulation.global_best_fitness:.2f}")
         print(f"  Saved: best_genome.pkl")
         print(f"{'='*70}\n")
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted")
+        print(f"\n\n⚠️  Training interrupted")
         sys.exit(0)
-    
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
-    
-    finally:
-        if not headless:
-            pygame.quit()
-
 
 def show_menu():
-    """Display menu."""
-    print("\n" + "="*70)
-    print("  NEAT MAZE NAVIGATION")
-    print("="*70)
-    print("\n  1. Start NEW training (with visuals)")
-    print("  2. Start NEW training (headless - faster)")
-    print("  3. RESUME from checkpoint (with visuals)")
-    print("  4. RESUME from checkpoint (headless - faster)")
-    print("  5. Exit")
-    print("="*70)
+    """Display main menu."""
+    print(f"\n{'='*70}")
+    print(f"  NEAT Maze Navigation")
+    print(f"{'='*70}\n")
+    print(f"  1. New training (visual)")
+    print(f"  2. New training (headless - faster)")
+    print(f"  3. Resume training (visual)")
+    print(f"  4. Resume training (headless)")
+    print(f"  5. Exit")
+    print(f"{'='*70}\n")
     
-    while True:
-        choice = input("\nChoice (1-5): ").strip()
-        if choice in ['1', '2', '3', '4', '5']:
-            return choice
-        print("❌ Invalid")
-
-
-def get_num_generations():
-    """Get number of generations."""
     while True:
         try:
-            num = input("Generations (default 50): ").strip()
-            if num == '':
-                return 50
-            num = int(num)
-            if num > 0:
-                return num
-            print("❌ Must be positive")
-        except ValueError:
-            print("❌ Invalid number")
+            choice = input("Choice: ").strip()
+            if choice in ['1', '2', '3', '4', '5']:
+                return int(choice)
+            print("Invalid. Enter 1-5.")
+        except (ValueError, EOFError, KeyboardInterrupt):
+            print("\nExiting...")
+            sys.exit(0)
 
+def get_num_generations():
+    """Get generations count."""
+    while True:
+        try:
+            user_input = input("Generations (default 50): ").strip()
+            if not user_input:
+                return 50
+            num_gens = int(user_input)
+            if num_gens > 0:
+                return num_gens
+            print("Enter positive number.")
+        except ValueError:
+            print("Invalid input.")
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting...")
+            sys.exit(0)
 
 if __name__ == '__main__':
-    local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir, 'config-maze.txt')
-    
-    if not os.path.exists(config_path):
-        print(f"❌ Config not found: {config_path}")
-        sys.exit(1)
+    config_path = os.path.join(os.path.dirname(__file__), 'config-maze.txt')
     
     choice = show_menu()
     
-    if choice == '1':
-        num_gens = get_num_generations()
-        run_neat(config_path, num_generations=num_gens, resume=False, headless=False)
-    
-    elif choice == '2':
-        num_gens = get_num_generations()
-        run_neat(config_path, num_generations=num_gens, resume=False, headless=True)
-    
-    elif choice == '3':
-        checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
-        if not checkpoint_files:
-            print("\n❌ No checkpoints")
-            num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=False, headless=False)
-        else:
-            num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=True, headless=False)
-    
-    elif choice == '4':
-        checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
-        if not checkpoint_files:
-            print("\n❌ No checkpoints")
-            num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=False, headless=True)
-        else:
-            num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=True, headless=True)
-    
-    elif choice == '5':
+    if choice == 5:
+        print("Goodbye!")
         sys.exit(0)
+    
+    num_gens = get_num_generations()
+    
+    if choice == 1:
+        run_neat(config_path, num_generations=num_gens, resume=False, headless=False)
+    elif choice == 2:
+        run_neat(config_path, num_generations=num_gens, resume=False, headless=True)
+    elif choice == 3:
+        run_neat(config_path, num_generations=num_gens, resume=True, headless=False)
+    elif choice == 4:
+        run_neat(config_path, num_generations=num_gens, resume=True, headless=True)

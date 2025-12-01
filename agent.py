@@ -1,279 +1,170 @@
 """
-Agent controlled by NEAT neural network navigating a maze.
-This version uses minimal input features to allow NEAT to learn naturally.
+Agent with neural network control and adaptive energy.
 """
 import math
 
 class Agent:
-    def __init__(self, maze, net, genome_id=None, max_steps=300):
-        """
-        Initialize an agent in the maze.
-        
-        Args:
-            maze: Maze instance
-            net: NEAT neural network
-            genome_id: Optional ID for debugging
-            max_steps: Maximum steps for normalization
-        """
+    def __init__(self, maze, net, genome_id=None, max_steps=400):
         self.maze = maze
         self.net = net
         self.genome_id = genome_id
-        self.max_steps = max(max_steps, 1)  # ⭐ FIX: Prevent division by zero
+        self.max_steps = max_steps
         
-        # Position in grid coordinates
+        # Position
         self.gx, self.gy = maze.start_pos
         
-        # Energy management system
-        self.energy = 100.0
-        self.max_energy = 100.0
+        # Adaptive energy based on food scarcity
+        total_food = sum(1 for f in maze.food_items if not f['eaten'])
+        if total_food <= 6:
+            self.max_energy = 100.0 + ((6 - total_food) * 10.0)  # Up to 160
+        else:
+            self.max_energy = 100.0
+        self.energy = self.max_energy
+        
+        # Energy costs
         self.energy_per_step = 0.5
         self.energy_per_collision = 5.0
         
-        # Performance tracking
+        # Tracking
         self.steps = 0
         self.collisions = 0
         self.collected_small = 0
         self.collected_big = 0
         self.alive = True
-        
-        # Trajectory tracking for fitness
         self.trajectory = [(self.gx, self.gy)]
         self.collision_steps = []
-        
-        # Distance tracking for fitness calculation
-        self.initial_distance_to_food = None
-        self.min_distance_to_food = float('inf')
-        self.last_distance_to_food = float('inf')
-        
-        # Track visited positions for revisit detection
         self.visited_positions = {(self.gx, self.gy): 1}
-        
-        # Validate starting position
-        if self.maze.is_wall(self.gx, self.gy):
-            raise ValueError(f"Start position ({self.gx}, {self.gy}) is a wall!")
     
     def get_distance_to_wall(self, direction):
-        """
-        Calculate distance to nearest wall in given direction.
-        
-        Args:
-            direction: 0=up, 1=down, 2=left, 3=right
-        
-        Returns:
-            int: Distance in cells to nearest wall
-        """
-        distance = 0
+        """Distance to wall in given direction (0=up, 1=down, 2=left, 3=right)."""
         x, y = self.gx, self.gy
+        distance = 0
+        max_dist = max(self.maze.rows, self.maze.cols)
         
-        max_dist = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
+        dx, dy = [(0, -1), (0, 1), (-1, 0), (1, 0)][direction]
         
         while distance < max_dist:
-            if direction == 0:  # up
-                y -= 1
-            elif direction == 1:  # down
-                y += 1
-            elif direction == 2:  # left
-                x -= 1
-            elif direction == 3:  # right
-                x += 1
-            
+            x += dx
+            y += dy
             distance += 1
-            
             if self.maze.is_wall(x, y):
                 return distance
         
         return distance
     
-    def get_unit_vector(self, target_x, target_y):
-        """
-        Calculate normalized direction vector to target.
-        
-        Returns:
-            tuple: (dx, dy) normalized to unit length
-        """
-        dx = target_x - self.gx
-        dy = target_y - self.gy
-        magnitude = math.sqrt(dx**2 + dy**2)
-        
-        # ⭐ FIX: Prevent division by zero
-        if magnitude < 0.001:
-            return (0.0, 0.0)
-        
-        return (dx / magnitude, dy / magnitude)
-    
-    def get_manhattan_distance(self, target_x, target_y):
-        """Calculate Manhattan distance to target."""
-        return abs(target_x - self.gx) + abs(target_y - self.gy)
-    
     def get_nearest_food(self):
-        """
-        Find nearest uneaten food item.
-        
-        Returns:
-            dict or None: Food item with keys 'grid_x', 'grid_y', 'big'
-        """
-        nearest_food = None
+        """Find nearest uneaten food."""
+        nearest = None
         min_dist = float('inf')
         
-        # ⭐ SAFETY: Check maze has food_items
-        if not hasattr(self.maze, 'food_items') or self.maze.food_items is None:
-            return None
-        
         for food in self.maze.food_items:
-            if not food.get('eaten', False):
-                dist = self.get_manhattan_distance(food['grid_x'], food['grid_y'])
-                
+            if not food['eaten']:
+                dist = abs(food['grid_x'] - self.gx) + abs(food['grid_y'] - self.gy)
                 if dist < min_dist:
                     min_dist = dist
-                    nearest_food = food
+                    nearest = food
         
-        return nearest_food
-    
-    def get_revisit_indicator(self):
-        """
-        Calculate how many times current position has been visited.
-        Returns normalized value (0.0 = new, 1.0 = heavily revisited).
-        """
-        visit_count = self.visited_positions.get((self.gx, self.gy), 0)
-        # Normalize: 0 visits = 0.0, 5+ visits = 1.0
-        return min(visit_count / 5.0, 1.0)
+        return nearest
     
     def get_inputs(self):
         """
-        Build 12-dimensional input vector for the neural network.
-        
-        Returns:
-            list: 12 normalized inputs:
-                0-3: Distance to walls (up, down, left, right) normalized
-                4-5: Unit vector to nearest food (dx, dy)
-                6: Distance to nearest food (normalized)
-                7: Food size (1.0 if big, 0.0 if small)
-                8: Energy critical flag (1.0 if < 30%)
-                9: Energy healthy flag (1.0 if > 60%)
-                10: Revisit indicator (0.0 = new, 1.0 = been here a lot)
-                11: Bias (1.0)
+        Build 13D input vector:
+        [0-3] Wall distances (up, down, left, right)
+        [4-5] Food direction (unit vector)
+        [6]   Food proximity (inverse distance)
+        [7]   Food size (1.0=big, 0.0=small)
+        [8]   Energy critical (<30%)
+        [9]   Energy healthy (>60%)
+        [10]  Revisit indicator
+        [11]  Food scarcity
+        [12]  Bias (1.0)
         """
-        # Calculate distances to walls (normalized)
-        max_dimension = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
+        max_dim = max(self.maze.rows, self.maze.cols, 1)
         
-        distance_up = min(self.get_distance_to_wall(0) / max_dimension, 1.0)
-        distance_down = min(self.get_distance_to_wall(1) / max_dimension, 1.0)
-        distance_left = min(self.get_distance_to_wall(2) / max_dimension, 1.0)
-        distance_right = min(self.get_distance_to_wall(3) / max_dimension, 1.0)
+        # Wall distances
+        walls = [min(self.get_distance_to_wall(i) / max_dim, 1.0) for i in range(4)]
         
-        # Find nearest food
-        nearest_food = self.get_nearest_food()
-        
-        if nearest_food:
-            # Unit vector to food
-            food_direction = self.get_unit_vector(
-                nearest_food['grid_x'],
-                nearest_food['grid_y']
-            )
+        # Food info
+        food = self.get_nearest_food()
+        if food:
+            dx = food['grid_x'] - self.gx
+            dy = food['grid_y'] - self.gy
+            dist = abs(dx) + abs(dy)
+            mag = math.sqrt(dx*dx + dy*dy)
             
-            # Distance to food (normalized)
-            food_distance = self.get_manhattan_distance(
-                nearest_food['grid_x'],
-                nearest_food['grid_y']
-            )
-            max_distance = max(self.maze.cols + self.maze.rows, 1)  # ⭐ FIX: Ensure > 0
-            food_distance_norm = min(food_distance / max_distance, 1.0)
-            
-            # Food size
-            food_size = 1.0 if nearest_food.get('big', False) else 0.0
+            food_dir = (dx/mag, dy/mag) if mag > 0.001 else (0.0, 0.0)
+            food_prox = 1.0 / (1.0 + dist * 0.1)  # Inverse distance
+            food_size = 1.0 if food['big'] else 0.0
         else:
-            food_direction = (0.0, 0.0)
-            food_distance_norm = 1.0
+            food_dir = (0.0, 0.0)
+            food_prox = 0.0
             food_size = 0.0
         
-        # Energy state flags
-        energy_ratio = self.energy / max(self.max_energy, 1.0)  # ⭐ FIX: Prevent division by zero
+        # Energy state
+        energy_ratio = self.energy / self.max_energy
         energy_critical = 1.0 if energy_ratio < 0.3 else 0.0
         energy_healthy = 1.0 if energy_ratio > 0.6 else 0.0
         
         # Revisit indicator
-        revisit_indicator = self.get_revisit_indicator()
+        visit_count = self.visited_positions.get((self.gx, self.gy), 0)
+        revisit = min(visit_count / 5.0, 1.0)
         
-        return [
-            distance_up,
-            distance_down,
-            distance_left,
-            distance_right,
-            food_direction[0],
-            food_direction[1],
-            food_distance_norm,
-            food_size,
-            energy_critical,
-            energy_healthy,
-            revisit_indicator,
-            1.0  # bias
-        ]
+        # Food scarcity
+        remaining = sum(1 for f in self.maze.food_items if not f['eaten'])
+        total = len(self.maze.food_items)
+        scarcity = 1.0 - (remaining / max(total, 1))
+        
+        return walls + list(food_dir) + [food_prox, food_size, energy_critical, 
+                                          energy_healthy, revisit, scarcity, 1.0]
     
     def step(self, direction_index):
-        """
-        Execute one movement step based on network output.
-        
-        Args:
-            direction_index: 0=up, 1=down, 2=left, 3=right, 4=stay
-        """
-        if not self.alive:
-            return
-        
-        # Check for energy depletion
-        if self.energy <= 0:
+        """Execute one step (0-3=move, 4=stay)."""
+        if not self.alive or self.energy <= 0:
             self.alive = False
             return
         
         self.steps += 1
         
-        # Handle stay action
+        # Stay action
         if direction_index == 4:
-            # Stay in place - no movement energy cost
             self.trajectory.append((self.gx, self.gy))
-            self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
+            self.visited_positions[(self.gx, self.gy)] = \
+                self.visited_positions.get((self.gx, self.gy), 0) + 1
             return
         
         # Deduct movement energy
         self.energy -= self.energy_per_step
         
         # Calculate new position
-        new_gx, new_gy = self.gx, self.gy
+        moves = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        dx, dy = moves[direction_index]
+        new_x, new_y = self.gx + dx, self.gy + dy
         
-        if direction_index == 0:  # up
-            new_gy -= 1
-        elif direction_index == 1:  # down
-            new_gy += 1
-        elif direction_index == 2:  # left
-            new_gx -= 1
-        elif direction_index == 3:  # right
-            new_gx += 1
-        
-        # Handle wall collision
-        if self.maze.is_wall(new_gx, new_gy):
+        # Wall collision
+        if self.maze.is_wall(new_x, new_y):
             self.collisions += 1
             self.collision_steps.append(self.steps)
             self.energy -= self.energy_per_collision
             
-            # Record failed attempt in trajectory
-            self.trajectory.append((self.gx, self.gy))
-            self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
-            
             if self.energy <= 0:
                 self.alive = False
+            
+            self.trajectory.append((self.gx, self.gy))
+            self.visited_positions[(self.gx, self.gy)] = \
+                self.visited_positions.get((self.gx, self.gy), 0) + 1
             return
         
-        # Update position
-        self.gx, self.gy = new_gx, new_gy
+        # Move to new position
+        self.gx, self.gy = new_x, new_y
         self.trajectory.append((self.gx, self.gy))
+        self.visited_positions[(self.gx, self.gy)] = \
+            self.visited_positions.get((self.gx, self.gy), 0) + 1
         
-        # Track visit to new position
-        self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
-        
-        # Check for food collection
+        # Check for food
         food = self.maze.get_food_at(self.gx, self.gy)
         if food:
             food['eaten'] = True
-            if food.get('big', False):
+            if food['big']:
                 self.collected_big += 1
                 self.energy = min(self.max_energy, self.energy + 70.0)
             else:
@@ -281,22 +172,4 @@ class Agent:
                 self.energy = min(self.max_energy, self.energy + 35.0)
     
     def is_starving(self):
-        """Check if agent has critically low energy."""
         return self.energy < 20.0
-    
-    def get_survival_time(self):
-        """Return number of steps agent survived."""
-        return self.steps
-    
-    def get_exploration_score(self):
-        """
-        Calculate how much progress was made toward food.
-        Returns value between 0 and 1.
-        """
-        if self.initial_distance_to_food is None or self.initial_distance_to_food == 0:
-            return 0.0
-        
-        improvement = self.initial_distance_to_food - self.min_distance_to_food
-        max_possible = max(self.initial_distance_to_food, 1)  # ⭐ FIX: Prevent division by zero
-        
-        return max(0.0, improvement / max_possible)

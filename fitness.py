@@ -1,84 +1,82 @@
 """
-Fitness Function v2: Simple, stable curriculum learning
+Normalized fitness function with adaptive curriculum.
 """
 import math
 
-def compute_fitness(agent, maze, generation):
+def compute_fitness(agent, maze, generation, total_generations=500):
     """
-    Calculate fitness with simple curriculum weights.
-    
-    Args:
-        agent: Agent with trajectory, energy, food data
-        maze: Maze environment
-        generation: Current generation number
+    Calculate fitness score normalized for dynamic food availability.
     
     Returns:
-        float: Fitness score (always >= 0.1)
+        float: Fitness score (minimum 0.1)
     """
-    # Safety checks
-    if agent is None or not hasattr(agent, 'trajectory'):
+    if not agent or not hasattr(agent, 'trajectory') or not agent.trajectory:
         return 0.1
     
-    trajectory = agent.trajectory
-    if not trajectory or len(trajectory) == 0:
-        return 0.1
+    # Extract metrics
+    small_collected = agent.collected_small
+    big_collected = agent.collected_big
+    steps = agent.steps
+    collisions = len(agent.collision_steps)
+    unique_cells = len(set(agent.trajectory))
     
-    # Extract agent metrics
-    small_food = getattr(agent, 'collected_small', 0)
-    big_food = getattr(agent, 'collected_big', 0)
-    survival_steps = getattr(agent, 'steps', 0)
-    collisions = len(getattr(agent, 'collision_steps', []))
-    unique_positions = len(set(trajectory))
+    # Count available food
+    small_available = sum(1 for f in maze.food_items if not f['big'])
+    big_available = sum(1 for f in maze.food_items if f['big'])
+    total_available = max(small_available + big_available, 1)
     
-    # Component 1: Food (most important)
-    food_score = (small_food * 50) + (big_food * 200)
+    # Collection rates (0.0 to 1.0)
+    small_rate = small_collected / max(small_available, 1)
+    big_rate = big_collected / max(big_available, 1)
+    total_rate = (small_collected + big_collected) / total_available
     
-    # Component 2: Survival
-    survival_score = survival_steps * 0.5
+    # ===== FOOD SCORE (normalized & scaled) =====
+    food_score = (small_available * 50 * small_rate) + (big_available * 200 * big_rate)
     
-    # Component 3: Exploration
-    exploration_score = unique_positions * 2.0
+    # Bonus for high collection rate (smooth linear)
+    if total_rate >= 0.5:
+        food_score *= (1.0 + (total_rate - 0.5))  # 1.0x → 1.5x
     
-    # Component 4: Movement diversity
-    movement_bonus = 0
-    if len(trajectory) > 1:
-        directions = set()
-        for i in range(len(trajectory) - 1):
-            dx = trajectory[i+1][0] - trajectory[i][0]
-            dy = trajectory[i+1][1] - trajectory[i][1]
-            if (dx, dy) != (0, 0):
-                directions.add((dx, dy))
-        movement_bonus = len(directions) * 10
+    # Scale to reference (16 food baseline)
+    food_score *= (16 / total_available)
     
-    # Penalties
-    collision_penalty = collisions * 5
+    # ===== OTHER COMPONENTS =====
+    survival_score = (steps / agent.max_steps) * 100
+    exploration_score = (unique_cells / (maze.rows * maze.cols)) * 100
+    
+    # Movement diversity
+    directions = set()
+    for i in range(len(agent.trajectory) - 1):
+        dx = agent.trajectory[i+1][0] - agent.trajectory[i][0]
+        dy = agent.trajectory[i+1][1] - agent.trajectory[i][1]
+        if (dx, dy) != (0, 0):
+            directions.add((dx, dy))
+    movement_bonus = (len(directions) / 4.0) * 40
+    
+    # ===== PENALTIES (fixed, not weighted) =====
+    collision_penalty = collisions * 15.0
     
     stagnation_penalty = 0
-    if len(trajectory) > 10:
-        position_diversity = unique_positions / len(trajectory)
-        if position_diversity < 0.05:
-            stagnation_penalty = 30
+    if len(agent.trajectory) > 10:
+        if (unique_cells / len(agent.trajectory)) < 0.05:
+            stagnation_penalty = 50
     
-    # Simple curriculum weights (3 phases)
-    if generation < 50:
-        # Phase 1: Learn to explore and find food
-        weights = {'food': 2.0, 'survival': 0.5, 'explore': 1.0, 'movement': 0.5}
-    elif generation < 150:
-        # Phase 2: Optimize food collection
-        weights = {'food': 3.0, 'survival': 0.3, 'explore': 0.5, 'movement': 0.3}
+    # ===== ADAPTIVE CURRICULUM WEIGHTS =====
+    progress = generation / max(total_generations, 1)
+    
+    if progress < 0.33:
+        w = {'food': 2.0, 'survival': 0.5, 'explore': 1.0, 'movement': 0.5}
+    elif progress < 0.67:
+        w = {'food': 3.0, 'survival': 0.3, 'explore': 0.5, 'movement': 0.3}
     else:
-        # Phase 3: Master efficiency
-        weights = {'food': 4.0, 'survival': 0.2, 'explore': 0.2, 'movement': 0.2}
+        w = {'food': 4.0, 'survival': 0.2, 'explore': 0.2, 'movement': 0.2}
     
-    # Calculate final fitness
+    # ===== FINAL SCORE =====
     fitness = (
-        (food_score * weights['food']) +
-        (survival_score * weights['survival']) +
-        (exploration_score * weights['explore']) +
-        (movement_bonus * weights['movement']) -
-        collision_penalty -
-        stagnation_penalty
-    )
+        food_score * w['food'] +
+        survival_score * w['survival'] +
+        exploration_score * w['explore'] +
+        movement_bonus * w['movement']
+    ) - collision_penalty - stagnation_penalty
     
-    # Ensure positive
     return max(fitness, 0.1)

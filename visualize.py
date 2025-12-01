@@ -78,7 +78,8 @@ def draw_all_agents(surface, agents, maze):
         draw_agent(surface, agent, maze)
 
 def draw_hud(surface, generation, best_fitness, avg_fitness, global_best_fitness, 
-             total_small=0, total_big=0, elapsed_time=0, alive_count=0, total_agents=0):
+             total_small=0, total_big=0, elapsed_time=0, alive_count=0, total_agents=0,
+             available_small=10, available_big=6):  # ⭐ NEW PARAMS
     """
     Render heads-up display with generation statistics.
     
@@ -123,15 +124,25 @@ def draw_hud(surface, generation, best_fitness, avg_fitness, global_best_fitness
     text = small_font.render(f"  Global Best: {global_best_fitness:.2f}", True, YELLOW)
     surface.blit(text, (10, y_offset + 94))
     
-    # Food collection stats
+    # ⭐ NEW: Food collection stats with rate
     mid_x = width // 2 - 80
     text = small_font.render(f"Food Collected:", True, CYAN)
     surface.blit(text, (mid_x, y_offset + 40))
     
-    text = small_font.render(f"{total_small} small, {total_big} big", True, YELLOW)
+    # Calculate collection rate (⭐ EXPLICIT PARENTHESES)
+    total_available = available_small + available_big
+    total_collected = total_small + total_big
+    collection_rate = ((total_collected / total_available) * 100) if total_available > 0 else 0.0
+    
+    text = small_font.render(f"{total_small}/{available_small} small, {total_big}/{available_big} big", True, YELLOW)
     surface.blit(text, (mid_x, y_offset + 58))
     
-    # Legend
+    # Show collection rate
+    rate_color = GREEN if collection_rate >= 70 else YELLOW if collection_rate >= 40 else RED
+    text = small_font.render(f"Rate: {collection_rate:.1f}%", True, rate_color)
+    surface.blit(text, (mid_x, y_offset + 76))
+    
+    # Legend (unchanged)
     legend_x = width - 200
     text = font.render("Legend:", True, WHITE)
     surface.blit(text, (legend_x, y_offset))
