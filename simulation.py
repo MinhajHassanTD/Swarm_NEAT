@@ -14,6 +14,7 @@ from fitness import compute_fitness
 # Simulation parameters
 MAX_STEPS = 400
 FPS = 30
+HEADLESS = False  # Set to True to disable visualization
 
 # Global tracking
 generation_counter = 0
@@ -29,16 +30,20 @@ def eval_genomes(genomes, config):
     # Create master maze
     master_maze = Maze(DEFAULT_MAZE, cell_size=20)
     
-    # Initialize display
-    screen_width = master_maze.cols * master_maze.cell_size
-    screen_height = master_maze.rows * master_maze.cell_size + 120
-    screen = pygame.display.get_surface()
+    # Initialize display (only if not headless)
+    screen = None
+    clock = None
     
-    if screen is None:
-        screen = pygame.display.set_mode((screen_width, screen_height))
-        pygame.display.set_caption("NEAT Maze Navigation")
-    
-    clock = pygame.time.Clock()
+    if not HEADLESS:
+        screen_width = master_maze.cols * master_maze.cell_size
+        screen_height = master_maze.rows * master_maze.cell_size + 120
+        screen = pygame.display.get_surface()
+        
+        if screen is None:
+            screen = pygame.display.set_mode((screen_width, screen_height))
+            pygame.display.set_caption("NEAT Maze Navigation")
+        
+        clock = pygame.time.Clock()
     
     # Create agents
     nets = []
@@ -66,19 +71,20 @@ def eval_genomes(genomes, config):
         agents.append(agent)
         ge.append(genome)
     
-    # Render every 5 frames for speed
+    # Render every 5 frames for speed (only when not headless)
     RENDER_EVERY = 5
     
     # Run simulation
     for step in range(MAX_STEPS):
-        # Handle quit
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
-                for i, agent in enumerate(agents):
-                    fitness = compute_fitness(agent, agent.maze, generation_counter)
-                    ge[i].fitness = max(0.1, fitness)
-                pygame.quit()
-                sys.exit(0)
+        # Handle quit (only if rendering)
+        if not HEADLESS:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
+                    for i, agent in enumerate(agents):
+                        fitness = compute_fitness(agent, agent.maze, generation_counter)
+                        ge[i].fitness = max(0.1, fitness)
+                    pygame.quit()
+                    sys.exit(0)
         
         # Update agents
         active_agents = 0
@@ -98,8 +104,8 @@ def eval_genomes(genomes, config):
             direction_idx = outputs.index(max(outputs))
             agent.step(direction_idx)
         
-        # Render (skip frames for speed)
-        if step % RENDER_EVERY == 0 or step == MAX_STEPS - 1:
+        # Render (skip frames for speed, only if not headless)
+        if not HEADLESS and (step % RENDER_EVERY == 0 or step == MAX_STEPS - 1):
             screen.fill((40, 40, 40))
             draw_maze(screen, master_maze)
             draw_food(screen, master_maze)

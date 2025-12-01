@@ -8,13 +8,21 @@ import pygame
 import pickle
 from simulation import eval_genomes
 
-def run_neat(config_path, num_generations=50, resume=False):
+def run_neat(config_path, num_generations=50, resume=False, headless=False):
     """Run NEAT evolution."""
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_path)
     
-    pygame.init()
+    # Set headless mode in simulation module
+    import simulation
+    simulation.HEADLESS = headless
+    
+    # Only initialize pygame if not headless
+    if not headless:
+        pygame.init()
+    else:
+        print("\n🚀 Running in HEADLESS mode (no visuals) - much faster!\n")
     
     if resume:
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
@@ -78,7 +86,8 @@ def run_neat(config_path, num_generations=50, resume=False):
         raise
     
     finally:
-        pygame.quit()
+        if not headless:
+            pygame.quit()
 
 
 def show_menu():
@@ -86,14 +95,16 @@ def show_menu():
     print("\n" + "="*70)
     print("  NEAT MAZE NAVIGATION")
     print("="*70)
-    print("\n  1. Start NEW training")
-    print("  2. RESUME from checkpoint")
-    print("  3. Exit")
+    print("\n  1. Start NEW training (with visuals)")
+    print("  2. Start NEW training (headless - faster)")
+    print("  3. RESUME from checkpoint (with visuals)")
+    print("  4. RESUME from checkpoint (headless - faster)")
+    print("  5. Exit")
     print("="*70)
     
     while True:
-        choice = input("\nChoice (1-3): ").strip()
-        if choice in ['1', '2', '3']:
+        choice = input("\nChoice (1-5): ").strip()
+        if choice in ['1', '2', '3', '4', '5']:
             return choice
         print("❌ Invalid")
 
@@ -125,17 +136,31 @@ if __name__ == '__main__':
     
     if choice == '1':
         num_gens = get_num_generations()
-        run_neat(config_path, num_generations=num_gens, resume=False)
+        run_neat(config_path, num_generations=num_gens, resume=False, headless=False)
     
     elif choice == '2':
+        num_gens = get_num_generations()
+        run_neat(config_path, num_generations=num_gens, resume=False, headless=True)
+    
+    elif choice == '3':
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
         if not checkpoint_files:
             print("\n❌ No checkpoints")
             num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=False)
+            run_neat(config_path, num_generations=num_gens, resume=False, headless=False)
         else:
             num_gens = get_num_generations()
-            run_neat(config_path, num_generations=num_gens, resume=True)
+            run_neat(config_path, num_generations=num_gens, resume=True, headless=False)
     
-    elif choice == '3':
+    elif choice == '4':
+        checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
+        if not checkpoint_files:
+            print("\n❌ No checkpoints")
+            num_gens = get_num_generations()
+            run_neat(config_path, num_generations=num_gens, resume=False, headless=True)
+        else:
+            num_gens = get_num_generations()
+            run_neat(config_path, num_generations=num_gens, resume=True, headless=True)
+    
+    elif choice == '5':
         sys.exit(0)
