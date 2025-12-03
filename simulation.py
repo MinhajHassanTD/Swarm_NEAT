@@ -80,8 +80,14 @@ def eval_genomes(genomes, config):
         if not HEADLESS:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
+                    # Compute final fitness before quitting
+                    population_stats = {
+                        'avg_food': sum(a.collected_small + a.collected_big for a in agents) / max(len(agents), 1),
+                        'max_food': max((a.collected_small + a.collected_big) for a in agents) if agents else 0,
+                        'avg_survival': sum(a.steps for a in agents) / max(len(agents), 1)
+                    }
                     for i, agent in enumerate(agents):
-                        fitness = compute_fitness(agent, agent.maze, generation_counter)
+                        fitness = compute_fitness(agent, agent.maze, generation_counter, population_stats)
                         ge[i].fitness = max(0.1, fitness)
                     pygame.quit()
                     sys.exit(0)
@@ -111,13 +117,19 @@ def eval_genomes(genomes, config):
             draw_food(screen, master_maze)
             draw_all_agents(screen, agents, master_maze)
             
-            # Calculate metrics
-            best_agent = max(agents, key=lambda x: (x.collected_small + x.collected_big, x.steps) if x.alive else (0, 0))
-            best_fitness = compute_fitness(best_agent, best_agent.maze, generation_counter)
+            # Calculate metrics for display
+            population_stats_temp = {
+                'avg_food': sum(a.collected_small + a.collected_big for a in agents) / max(len(agents), 1),
+                'max_food': max((a.collected_small + a.collected_big) for a in agents) if agents else 0,
+                'avg_survival': sum(a.steps for a in agents) / max(len(agents), 1)
+            }
+            
+            best_agent = max(agents, key=lambda x: compute_fitness(x, x.maze, generation_counter, population_stats_temp))
+            best_fitness = compute_fitness(best_agent, best_agent.maze, generation_counter, population_stats_temp)
             
             # Quick avg fitness (sample 20)
             sample = agents[:min(20, len(agents))]
-            sample_fitnesses = [compute_fitness(a, a.maze, generation_counter) for a in sample if a.alive]
+            sample_fitnesses = [compute_fitness(a, a.maze, generation_counter, population_stats_temp) for a in sample]
             avg_fitness = sum(sample_fitnesses) / len(sample_fitnesses) if sample_fitnesses else 0
             
             total_small = sum(a.collected_small for a in agents)
@@ -135,41 +147,62 @@ def eval_genomes(genomes, config):
         if active_agents == 0:
             break
     
-    # Calculate final fitness
+    # Calculate population stats BEFORE computing fitness
+    total_food = sum(a.collected_small + a.collected_big for a in agents)
+    avg_food = total_food / max(len(agents), 1)
+    max_food = max((a.collected_small + a.collected_big) for a in agents) if agents else 0
+    avg_survival = sum(a.steps for a in agents) / max(len(agents), 1)
+    
+    population_stats = {
+        'avg_food': avg_food,
+        'max_food': max_food,
+        'avg_survival': avg_survival
+    }
+    
+    # Compute fitness for each agent WITH STATS
     for i, agent in enumerate(agents):
-        try:
-            fitness = compute_fitness(agent, agent.maze, generation_counter)
-            ge[i].fitness = max(0.1, float(fitness))
-        except Exception as e:
-            print(f"⚠️  Error computing fitness for genome {ge[i].key}: {e}")
-            ge[i].fitness = 0.1
+        fitness = compute_fitness(agent, agent.maze, generation_counter, population_stats)
+        ge[i].fitness = fitness
     
     # Verify all have fitness
     for genome_id, genome in genomes:
         if genome.fitness is None or genome.fitness <= 0:
             genome.fitness = 0.1
     
-    # Track best
-    best_fitness = max(g.fitness for g in ge)
-    if best_fitness > global_best_fitness:
-        global_best_fitness = best_fitness
-        best_idx = ge.index(max(ge, key=lambda g: g.fitness))
-        global_best_genome = genomes[best_idx][1]
+    # ========== FIXED: Track best genome properly ==========
+    best_fitness_this_gen = 0.0
+    best_genome_this_gen = None
+    best_agent_this_gen = None
+    
+    for i, (genome_id, genome) in enumerate(genomes):
+        if genome.fitness > best_fitness_this_gen:
+            best_fitness_this_gen = genome.fitness
+            best_genome_this_gen = genome
+            best_agent_this_gen = agents[i]
+    
+    # Update global best if this generation is better
+    if best_fitness_this_gen > global_best_fitness:
+        global_best_fitness = best_fitness_this_gen
+        global_best_genome = best_genome_this_gen
         
+        # Save best genome
         with open('best_genome.pkl', 'wb') as f:
             pickle.dump(global_best_genome, f)
-        print(f"    🏆 New best! Fitness: {global_best_fitness:.1f}")
+        
+        print(f"    🏆 New Global Best! Fitness: {global_best_fitness:.1f} | "
+              f"Food: {best_agent_this_gen.collected_small}s+{best_agent_this_gen.collected_big}b | "
+              f"Steps: {best_agent_this_gen.steps}")
     
     # Summary
-    avg_fitness = sum(g.fitness for g in ge) / len(ge)
-    best_agent = agents[ge.index(max(ge, key=lambda g: g.fitness))]
+    avg_fitness = sum(genome.fitness for _, genome in genomes) / len(genomes)
     alive_count = sum(1 for a in agents if a.alive)
     elapsed = time.time() - gen_start_time
     
     print(f"    Gen {generation_counter:3d} │ "
-          f"Best: {best_fitness:6.1f} │ "
+          f"Best: {best_fitness_this_gen:6.1f} │ "
           f"Avg: {avg_fitness:6.1f} │ "
-          f"Food: {best_agent.collected_small}s+{best_agent.collected_big}b │ "
+          f"AvgFood: {avg_food:4.1f} │ "
+          f"MaxFood: {max_food:2d} │ "
           f"Alive: {alive_count:3d}/{len(agents):3d} │ "
           f"Time: {elapsed:5.1f}s")
     

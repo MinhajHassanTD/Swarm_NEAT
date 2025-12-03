@@ -135,8 +135,8 @@ class Agent:
         Returns normalized value (0.0 = new, 1.0 = heavily revisited).
         """
         visit_count = self.visited_positions.get((self.gx, self.gy), 0)
-        # Normalize: 0 visits = 0.0, 3+ visits = 1.0
-        return min(visit_count / 3.0, 1.0)
+        # Normalize: 0 visits = 0.0, 10+ visits = 1.0
+        return min(visit_count / 10.0, 1.0)
     
     def get_inputs(self):
         """
@@ -145,8 +145,8 @@ class Agent:
         Returns:
             list: 12 normalized inputs:
                 0-3: Distance to walls (up, down, left, right) normalized
-                4-5: Unit vector to nearest food (dx, dy)
-                6: Distance to nearest food (normalized)
+                4-5: RAW directional distance to food (dx, dy) - CHANGED
+                6: Manhattan distance to nearest food (normalized)
                 7: Food size (1.0 if big, 0.0 if small)
                 8: Energy critical flag (1.0 if < 30%)
                 9: Energy healthy flag (1.0 if > 60%)
@@ -154,7 +154,7 @@ class Agent:
                 11: Bias (1.0)
         """
         # Calculate distances to walls (normalized)
-        max_dimension = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
+        max_dimension = max(self.maze.rows, self.maze.cols, 1)
         
         distance_up = min(self.get_distance_to_wall(0) / max_dimension, 1.0)
         distance_down = min(self.get_distance_to_wall(1) / max_dimension, 1.0)
@@ -165,31 +165,31 @@ class Agent:
         nearest_food = self.get_nearest_food()
         
         if nearest_food:
-            # Unit vector to food
-            food_direction = self.get_unit_vector(
-                nearest_food['grid_x'],
-                nearest_food['grid_y']
-            )
+            # Raw directional distance (CHANGED)
+            dx = nearest_food['grid_x'] - self.gx
+            dy = nearest_food['grid_y'] - self.gy
             
-            # Distance to food (normalized)
-            food_distance = self.get_manhattan_distance(
-                nearest_food['grid_x'],
-                nearest_food['grid_y']
-            )
-            max_distance = max(self.maze.cols + self.maze.rows, 1)  # ⭐ FIX: Ensure > 0
+            # Normalize by maze size
+            max_distance = max(self.maze.cols + self.maze.rows, 1)
+            food_dx_norm = dx / max_distance  # Can be negative!
+            food_dy_norm = dy / max_distance  # Can be negative!
+            
+            # Manhattan distance to food (normalized)
+            food_distance = abs(dx) + abs(dy)
             food_distance_norm = min(food_distance / max_distance, 1.0)
             
             # Food size
             food_size = 1.0 if nearest_food.get('big', False) else 0.0
         else:
-            food_direction = (0.0, 0.0)
+            food_dx_norm = 0.0
+            food_dy_norm = 0.0
             food_distance_norm = 1.0
             food_size = 0.0
         
         # Energy state flags
-        energy_ratio = self.energy / max(self.max_energy, 1.0)  # ⭐ FIX: Prevent division by zero
-        energy_critical = 1.0 if energy_ratio < 0.3 else 0.0
-        energy_healthy = 1.0 if energy_ratio > 0.6 else 0.0
+        energy_ratio = self.energy / max(self.max_energy, 1.0)
+        energy_critical = 1.0 if energy_ratio < 0.25 else 0.0
+        energy_healthy = 1.0 if energy_ratio > 0.75 else 0.0
         
         # Revisit indicator
         revisit_indicator = self.get_revisit_indicator()
@@ -199,8 +199,8 @@ class Agent:
             distance_down,
             distance_left,
             distance_right,
-            food_direction[0],
-            food_direction[1],
+            food_dx_norm,      # CHANGED: Raw dx (can be -1.0 to 1.0)
+            food_dy_norm,      # CHANGED: Raw dy (can be -1.0 to 1.0)
             food_distance_norm,
             food_size,
             energy_critical,
