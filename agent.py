@@ -18,7 +18,7 @@ class Agent:
         self.maze = maze
         self.net = net
         self.genome_id = genome_id
-        self.max_steps = max(max_steps, 1)  # ⭐ FIX: Prevent division by zero
+        self.max_steps = max(max_steps, 1)
         
         # Position in grid coordinates
         self.gx, self.gy = maze.start_pos
@@ -65,7 +65,7 @@ class Agent:
         distance = 0
         x, y = self.gx, self.gy
         
-        max_dist = max(self.maze.rows, self.maze.cols, 1)  # ⭐ FIX: Ensure > 0
+        max_dist = max(self.maze.rows, self.maze.cols, 1)
         
         while distance < max_dist:
             if direction == 0:  # up
@@ -95,7 +95,6 @@ class Agent:
         dy = target_y - self.gy
         magnitude = math.sqrt(dx**2 + dy**2)
         
-        # ⭐ FIX: Prevent division by zero
         if magnitude < 0.001:
             return (0.0, 0.0)
         
@@ -115,7 +114,6 @@ class Agent:
         nearest_food = None
         min_dist = float('inf')
         
-        # ⭐ SAFETY: Check maze has food_items
         if not hasattr(self.maze, 'food_items') or self.maze.food_items is None:
             return None
         
@@ -290,6 +288,6 @@ class Agent:
             return 0.0
         
         improvement = self.initial_distance_to_food - self.min_distance_to_food
-        max_possible = max(self.initial_distance_to_food, 1)  # ⭐ FIX: Prevent division by zero
+        max_possible = max(self.initial_distance_to_food, 1)
         
         return max(0.0, improvement / max_possible)

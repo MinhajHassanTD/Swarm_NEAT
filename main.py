@@ -17,13 +17,13 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False, food
     # Set headless mode in simulation module
     import simulation
     simulation.HEADLESS = headless
-    simulation.FOOD_RANDOMIZE_EVERY = food_randomize_every  # ⭐ NEW
+    simulation.FOOD_RANDOMIZE_EVERY = food_randomize_every 
     
     # Only initialize pygame if not headless
     if not headless:
         pygame.init()
     else:
-        print("\n🚀 Running in HEADLESS mode (no visuals) - much faster!\n")
+        print("\nRunning in HEADLESS mode (no visuals) - much faster!\n")
     
     if resume:
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
@@ -32,14 +32,14 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False, food
             latest_gen = max(checkpoint_nums)
             checkpoint_file = f'neat-checkpoint-{latest_gen}'
             
-            print(f"\n✅ Restoring from {checkpoint_file}")
+            print(f"\nRestoring from {checkpoint_file}")
             population = neat.Checkpointer.restore_checkpoint(checkpoint_file)
             population.config = config
             
             import simulation
             simulation.generation_counter = latest_gen
         else:
-            print("\n⚠️  No checkpoints, starting fresh")
+            print("\nNo checkpoints, starting fresh")
             population = neat.Population(config)
     else:
         population = neat.Population(config)
@@ -56,7 +56,7 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False, food
     
     try:
         print(f"\n{'='*70}")
-        print(f"  🚀 NEAT TRAINING")
+        print(f"  NEAT TRAINING")
         print(f"{'='*70}")
         print(f"  Population: {config.pop_size} | Generations: {num_generations}")
         print(f"{'='*70}\n")
@@ -70,18 +70,18 @@ def run_neat(config_path, num_generations=50, resume=False, headless=False, food
             pickle.dump(winner, f)
         
         print(f"\n{'='*70}")
-        print(f"  ✅ COMPLETE!")
+        print(f"  COMPLETE!")
         print(f"{'='*70}")
         print(f"  Best Fitness: {winner.fitness:.1f}")
         print(f"  Saved: best_genome.pkl")
         print(f"{'='*70}\n")
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted")
+        print("\n\nInterrupted")
         sys.exit(0)
     
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
         raise
@@ -107,7 +107,7 @@ def show_menu():
         choice = input("\nChoice (1-5): ").strip()
         if choice in ['1', '2', '3', '4', '5']:
             return choice
-        print("❌ Invalid")
+        print("Invalid")
 
 
 def get_num_generations():
@@ -120,9 +120,9 @@ def get_num_generations():
             num = int(num)
             if num > 0:
                 return num
-            print("❌ Must be positive")
+            print("Must be positive")
         except ValueError:
-            print("❌ Invalid number")
+            print("Invalid number")
 
 
 def get_food_randomization():
@@ -135,9 +135,9 @@ def get_food_randomization():
             num = int(num)
             if num >= 0:
                 return num
-            print("❌ Must be >= 0")
+            print("Must be >= 0")
         except ValueError:
-            print("❌ Invalid number")
+            print("Invalid number")
 
 
 if __name__ == '__main__':
@@ -145,7 +145,7 @@ if __name__ == '__main__':
     config_path = os.path.join(local_dir, 'config-maze.txt')
     
     if not os.path.exists(config_path):
-        print(f"❌ Config not found: {config_path}")
+        print(f"Config not found: {config_path}")
         sys.exit(1)
     
     choice = show_menu()
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     elif choice == '3':
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
         if not checkpoint_files:
-            print("\n❌ No checkpoints")
+            print("\nNo checkpoints")
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
             run_neat(config_path, num_generations=num_gens, resume=False, headless=False,
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     elif choice == '4':
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
         if not checkpoint_files:
-            print("\n❌ No checkpoints")
+            print("\nNo checkpoints")
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
             run_neat(config_path, num_generations=num_gens, resume=False, headless=True,

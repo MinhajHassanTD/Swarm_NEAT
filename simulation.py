@@ -6,7 +6,7 @@ import neat
 import time
 import pickle
 import sys
-import copy  # ⭐ ADD THIS
+import copy
 from maze import Maze, DEFAULT_MAZE
 from agent import Agent
 from visualize import draw_maze, draw_food, draw_all_agents, draw_hud
@@ -17,7 +17,6 @@ MAX_STEPS = 600
 FPS = 30
 HEADLESS = False  # Set to True to disable visualization
 
-# ⭐ NEW: Food randomization control
 FOOD_RANDOMIZE_EVERY = 3  # Randomize food every N generations (0 = never)
 SAVED_FOOD_POSITIONS = None  # Store food positions
 
@@ -25,7 +24,7 @@ SAVED_FOOD_POSITIONS = None  # Store food positions
 generation_counter = 0
 global_best_fitness = 0.0
 global_best_genome = None
-top_5_genomes = []  # ⭐ NEW: Store top 5 globally
+top_5_genomes = []  
 
 def eval_genomes(genomes, config):
     """Evaluate all genomes by running maze simulation."""
@@ -36,7 +35,6 @@ def eval_genomes(genomes, config):
     # Create master maze
     master_maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
     
-    # ⭐ FIXED: Save food positions and only regenerate every N generations
     if SAVED_FOOD_POSITIONS is None:
         # First time: save initial random positions
         SAVED_FOOD_POSITIONS = copy.deepcopy(master_maze.food_items)
@@ -200,7 +198,6 @@ def eval_genomes(genomes, config):
             best_genome_this_gen = genome
             best_agent_this_gen = agents[i]
     
-    # ⭐ FIXED: Only add UNIQUE genomes to top 5
     if best_genome_this_gen:
         # Check if this genome is already in top 5 (by genome key/id)
         genome_ids_in_top5 = [g.key for _, g in top_5_genomes]
@@ -228,7 +225,7 @@ def eval_genomes(genomes, config):
                 with open('top_5_genomes.pkl', 'wb') as f:
                     pickle.dump(top_5_genomes, f)
                 
-                print(f"    ⭐ Added to Top 5! (Fitness: {best_fitness_this_gen:.1f}, ID: {best_genome_this_gen.key})")
+                print(f"    Added to Top 5! (Fitness: {best_fitness_this_gen:.1f}, ID: {best_genome_this_gen.key})")
     
     # Update global best if this generation is better
     if best_fitness_this_gen > global_best_fitness:
@@ -239,7 +236,7 @@ def eval_genomes(genomes, config):
         with open('best_genome.pkl', 'wb') as f:
             pickle.dump(global_best_genome, f)
         
-        print(f"    🏆 New Global Best! Fitness: {global_best_fitness:.1f} | "
+        print(f"    New Global Best! Fitness: {global_best_fitness:.1f} | "
               f"Food: {best_agent_this_gen.collected_small}s+{best_agent_this_gen.collected_big}b | "
               f"Steps: {best_agent_this_gen.steps}")
     
