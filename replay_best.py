@@ -12,15 +12,15 @@ from agent import Agent
 from visualize import draw_maze, draw_food, draw_agent, draw_hud
 from fitness import compute_fitness
 
-def replay_genome(genome, config, num_runs=3, max_steps=600, fps=10):
+def replay_genome(genome, config, genome_rank=1, num_runs=3, max_steps=600, fps=10):
     """Replay trained genome."""
     pygame.init()
     
-    maze = Maze(DEFAULT_MAZE, cell_size=20)
+    maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
     screen_width = maze.cols * maze.cell_size
     screen_height = maze.rows * maze.cell_size + 120
     screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("NEAT Replay")
+    pygame.display.set_caption(f"NEAT Replay - Genome #{genome_rank}")
     clock = pygame.time.Clock()
     
     stats = {'food': 0, 'steps': 0, 'collisions': 0}
@@ -28,7 +28,7 @@ def replay_genome(genome, config, num_runs=3, max_steps=600, fps=10):
     for run in range(num_runs):
         print(f"\n▶ Run {run + 1}/{num_runs}")
         
-        maze = Maze(DEFAULT_MAZE, cell_size=20)
+        maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
         net = neat.nn.RecurrentNetwork.create(genome, config)
         net.reset()
         
@@ -91,18 +91,44 @@ def replay_genome(genome, config, num_runs=3, max_steps=600, fps=10):
     pygame.quit()
 
 
+def show_genome_menu(top_5_genomes):
+    """Show menu to select genome from top 5."""
+    print("\n" + "="*60)
+    print("  SELECT GENOME TO REPLAY")
+    print("="*60)
+    
+    for i, (fitness, _) in enumerate(top_5_genomes, 1):
+        print(f"  {i}. Genome #{i} - Fitness: {fitness:.1f}")
+    
+    print(f"  {len(top_5_genomes) + 1}. Back")
+    print("="*60)
+    
+    while True:
+        choice = input(f"\nChoice (1-{len(top_5_genomes) + 1}): ").strip()
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(top_5_genomes):
+                return choice_num - 1  # Return index
+            elif choice_num == len(top_5_genomes) + 1:
+                return None
+        except ValueError:
+            pass
+        print("❌ Invalid")
+
+
 def show_menu():
     """Display menu."""
     print("\n" + "="*60)
     print("  GENOME REPLAY")
     print("="*60)
-    print("\n  1. Replay best genome")
-    print("  2. Exit")
+    print("\n  1. Replay from Top 5 genomes")
+    print("  2. Replay best_genome.pkl (legacy)")
+    print("  3. Exit")
     print("="*60)
     
     while True:
-        choice = input("\nChoice (1-2): ").strip()
-        if choice in ['1', '2']:
+        choice = input("\nChoice (1-3): ").strip()
+        if choice in ['1', '2', '3']:
             return choice
         print("❌ Invalid")
 
@@ -119,21 +145,45 @@ if __name__ == '__main__':
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_path)
     
-    genome_file = 'best_genome.pkl'
-    if not os.path.exists(genome_file):
-        print(f"❌ No saved genome: {genome_file}")
-        sys.exit(1)
-    
-    print(f"✅ Loading {genome_file}...")
-    with open(genome_file, 'rb') as f:
-        genome = pickle.load(f)
-    
     choice = show_menu()
     
     if choice == '1':
+        # Load top 5 genomes
+        if not os.path.exists('top_5_genomes.pkl'):
+            print("❌ No top_5_genomes.pkl found. Train first!")
+            sys.exit(1)
+        
+        with open('top_5_genomes.pkl', 'rb') as f:
+            top_5_genomes = pickle.load(f)
+        
+        if not top_5_genomes:
+            print("❌ No genomes saved yet!")
+            sys.exit(1)
+        
+        genome_idx = show_genome_menu(top_5_genomes)
+        if genome_idx is None:
+            sys.exit(0)
+        
+        fitness, genome = top_5_genomes[genome_idx]
+        print(f"\n✅ Selected Genome #{genome_idx + 1} (Fitness: {fitness:.1f})")
+        
         num_runs = int(input("Runs (default 3): ").strip() or "3")
         fps = int(input("FPS (default 10): ").strip() or "10")
-        replay_genome(genome, config, num_runs=num_runs, fps=fps)
+        replay_genome(genome, config, genome_rank=genome_idx + 1, num_runs=num_runs, fps=fps)
     
     elif choice == '2':
+        # Legacy: Load best_genome.pkl
+        if not os.path.exists('best_genome.pkl'):
+            print("❌ No best_genome.pkl found!")
+            sys.exit(1)
+        
+        with open('best_genome.pkl', 'rb') as f:
+            genome = pickle.load(f)
+        
+        print("✅ Loaded best_genome.pkl")
+        num_runs = int(input("Runs (default 3): ").strip() or "3")
+        fps = int(input("FPS (default 10): ").strip() or "10")
+        replay_genome(genome, config, genome_rank=1, num_runs=num_runs, fps=fps)
+    
+    elif choice == '3':
         sys.exit(0)

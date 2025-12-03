@@ -6,6 +6,7 @@ import neat
 import time
 import pickle
 import sys
+import copy  # ⭐ ADD THIS
 from maze import Maze, DEFAULT_MAZE
 from agent import Agent
 from visualize import draw_maze, draw_food, draw_all_agents, draw_hud
@@ -16,19 +17,38 @@ MAX_STEPS = 600
 FPS = 30
 HEADLESS = False  # Set to True to disable visualization
 
+# ⭐ NEW: Food randomization control
+FOOD_RANDOMIZE_EVERY = 3  # Randomize food every N generations (0 = never)
+SAVED_FOOD_POSITIONS = None  # Store food positions
+
 # Global tracking
 generation_counter = 0
 global_best_fitness = 0.0
 global_best_genome = None
+top_5_genomes = []  # ⭐ NEW: Store top 5 globally
 
 def eval_genomes(genomes, config):
     """Evaluate all genomes by running maze simulation."""
-    global generation_counter, global_best_fitness, global_best_genome
+    global generation_counter, global_best_fitness, global_best_genome, SAVED_FOOD_POSITIONS, top_5_genomes
     
     gen_start_time = time.time()
     
     # Create master maze
-    master_maze = Maze(DEFAULT_MAZE, cell_size=20)
+    master_maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
+    
+    # ⭐ FIXED: Save food positions and only regenerate every N generations
+    if SAVED_FOOD_POSITIONS is None:
+        # First time: save initial random positions
+        SAVED_FOOD_POSITIONS = copy.deepcopy(master_maze.food_items)
+        print(f"\n    💾 Food positions initialized!\n")
+    elif FOOD_RANDOMIZE_EVERY > 0 and generation_counter > 0 and generation_counter % FOOD_RANDOMIZE_EVERY == 0:
+        # Regenerate and save new positions
+        master_maze.randomize_food()
+        SAVED_FOOD_POSITIONS = copy.deepcopy(master_maze.food_items)
+        print(f"\n    🔄 Food positions randomized! (Generation {generation_counter})\n")
+    else:
+        # Reuse saved positions
+        master_maze.food_items = copy.deepcopy(SAVED_FOOD_POSITIONS)
     
     # Initialize display (only if not headless)
     screen = None
@@ -169,7 +189,7 @@ def eval_genomes(genomes, config):
         if genome.fitness is None or genome.fitness <= 0:
             genome.fitness = 0.1
     
-    # ========== FIXED: Track best genome properly ==========
+    # Find best genome this generation
     best_fitness_this_gen = 0.0
     best_genome_this_gen = None
     best_agent_this_gen = None
@@ -180,12 +200,42 @@ def eval_genomes(genomes, config):
             best_genome_this_gen = genome
             best_agent_this_gen = agents[i]
     
+    # ⭐ FIXED: Only add UNIQUE genomes to top 5
+    if best_genome_this_gen:
+        # Check if this genome is already in top 5 (by genome key/id)
+        genome_ids_in_top5 = [g.key for _, g in top_5_genomes]
+        is_duplicate = best_genome_this_gen.key in genome_ids_in_top5
+        
+        if not is_duplicate:
+            # Check if this genome deserves to be in top 5
+            should_add = False
+            
+            if len(top_5_genomes) < 5:
+                # List not full yet, always add
+                should_add = True
+            else:
+                # Check if better than 5th place
+                fifth_place_fitness = top_5_genomes[4][0]
+                if best_fitness_this_gen > fifth_place_fitness:
+                    should_add = True
+            
+            if should_add:
+                top_5_genomes.append((best_fitness_this_gen, best_genome_this_gen))
+                top_5_genomes.sort(key=lambda x: x[0], reverse=True)
+                top_5_genomes = top_5_genomes[:5]
+                
+                # Save top 5 genomes
+                with open('top_5_genomes.pkl', 'wb') as f:
+                    pickle.dump(top_5_genomes, f)
+                
+                print(f"    ⭐ Added to Top 5! (Fitness: {best_fitness_this_gen:.1f}, ID: {best_genome_this_gen.key})")
+    
     # Update global best if this generation is better
     if best_fitness_this_gen > global_best_fitness:
         global_best_fitness = best_fitness_this_gen
         global_best_genome = best_genome_this_gen
         
-        # Save best genome
+        # Save best genome (backward compatibility)
         with open('best_genome.pkl', 'wb') as f:
             pickle.dump(global_best_genome, f)
         
