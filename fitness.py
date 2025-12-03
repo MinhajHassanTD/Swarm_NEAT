@@ -60,10 +60,10 @@ def compute_fitness(agent, maze, generation):
             stagnation_penalty = 30
     
     # Simple curriculum weights (3 phases)
-    if generation < 50:
+    if generation < 80:
         # Phase 1: Learn to explore and find food
         weights = {'food': 2.0, 'survival': 0.5, 'explore': 1.0, 'movement': 0.5}
-    elif generation < 150:
+    elif generation < 200:
         # Phase 2: Optimize food collection
         weights = {'food': 3.0, 'survival': 0.3, 'explore': 0.5, 'movement': 0.3}
     else:

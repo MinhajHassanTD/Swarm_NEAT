@@ -24,8 +24,8 @@ class Agent:
         self.gx, self.gy = maze.start_pos
         
         # Energy management system
-        self.energy = 100.0
-        self.max_energy = 100.0
+        self.energy = 150.0
+        self.max_energy = 150.0
         self.energy_per_step = 0.5
         self.energy_per_collision = 5.0
         
@@ -275,10 +275,10 @@ class Agent:
             food['eaten'] = True
             if food.get('big', False):
                 self.collected_big += 1
-                self.energy = min(self.max_energy, self.energy + 70.0)
+                self.energy = min(self.max_energy, self.energy + 80.0)
             else:
                 self.collected_small += 1
-                self.energy = min(self.max_energy, self.energy + 35.0)
+                self.energy = min(self.max_energy, self.energy + 40.0)
     
     def is_starving(self):
         """Check if agent has critically low energy."""

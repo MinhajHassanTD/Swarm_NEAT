@@ -12,7 +12,7 @@ from visualize import draw_maze, draw_food, draw_all_agents, draw_hud
 from fitness import compute_fitness
 
 # Simulation parameters
-MAX_STEPS = 400
+MAX_STEPS = 600
 FPS = 30
 HEADLESS = False  # Set to True to disable visualization
 

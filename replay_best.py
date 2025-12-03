@@ -12,7 +12,7 @@ from agent import Agent
 from visualize import draw_maze, draw_food, draw_agent, draw_hud
 from fitness import compute_fitness
 
-def replay_genome(genome, config, num_runs=3, max_steps=400, fps=10):
+def replay_genome(genome, config, num_runs=3, max_steps=600, fps=10):
     """Replay trained genome."""
     pygame.init()
     
