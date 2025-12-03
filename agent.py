@@ -135,8 +135,8 @@ class Agent:
         Returns normalized value (0.0 = new, 1.0 = heavily revisited).
         """
         visit_count = self.visited_positions.get((self.gx, self.gy), 0)
-        # Normalize: 0 visits = 0.0, 5+ visits = 1.0
-        return min(visit_count / 5.0, 1.0)
+        # Normalize: 0 visits = 0.0, 3+ visits = 1.0
+        return min(visit_count / 3.0, 1.0)
     
     def get_inputs(self):
         """
@@ -214,7 +214,7 @@ class Agent:
         Execute one movement step based on network output.
         
         Args:
-            direction_index: 0=up, 1=down, 2=left, 3=right, 4=stay
+            direction_index: 0=up, 1=down, 2=left, 3=right
         """
         if not self.alive:
             return
@@ -225,13 +225,6 @@ class Agent:
             return
         
         self.steps += 1
-        
-        # Handle stay action
-        if direction_index == 4:
-            # Stay in place - no movement energy cost
-            self.trajectory.append((self.gx, self.gy))
-            self.visited_positions[(self.gx, self.gy)] = self.visited_positions.get((self.gx, self.gy), 0) + 1
-            return
         
         # Deduct movement energy
         self.energy -= self.energy_per_step

@@ -64,9 +64,9 @@ class Maze:
     
     def is_wall(self, grid_x, grid_y):
         """Check if given grid position is a wall."""
-        if grid_y < 0 or grid_y >= self.rows:
+        if grid_y < 1 or grid_y > self.rows - 1:
             return True
-        if grid_x < 0 or grid_x >= self.cols:
+        if grid_x < 1 or grid_x > self.cols - 1:
             return True
         return self.layout[grid_y][grid_x] == '1'
     
