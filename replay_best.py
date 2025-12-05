@@ -113,7 +113,7 @@ def show_genome_menu(top_5_genomes):
                 return None
         except ValueError:
             pass
-        print("❌ Invalid")
+        print("Invalid")
 
 
 def show_menu():
@@ -121,16 +121,17 @@ def show_menu():
     print("\n" + "="*60)
     print("  GENOME REPLAY")
     print("="*60)
-    print("\n  1. Replay from Top 5 genomes")
-    print("  2. Replay best_genome.pkl (legacy)")
-    print("  3. Exit")
+    print("\n  1. Replay from Top 5 Global (best on current configs)")
+    print("  2. Replay from Top 5 Robust (tested on multiple configs)")
+    print("  3. Replay best_genome.pkl (legacy)")
+    print("  4. Exit")
     print("="*60)
     
     while True:
-        choice = input("\nChoice (1-3): ").strip()
-        if choice in ['1', '2', '3']:
+        choice = input("\nChoice (1-4): ").strip()
+        if choice in ['1', '2', '3', '4']:
             return choice
-        print("❌ Invalid")
+        print("Invalid")
 
 
 if __name__ == '__main__':
@@ -138,7 +139,7 @@ if __name__ == '__main__':
     config_path = os.path.join(local_dir, 'config-maze.txt')
     
     if not os.path.exists(config_path):
-        print(f"❌ Config not found: {config_path}")
+        print(f"Config not found: {config_path}")
         sys.exit(1)
     
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
@@ -148,16 +149,16 @@ if __name__ == '__main__':
     choice = show_menu()
     
     if choice == '1':
-        # Load top 5 genomes
+        # Load top 5 global genomes
         if not os.path.exists('top_5_genomes.pkl'):
-            print("❌ No top_5_genomes.pkl found. Train first!")
+            print("No top_5_genomes.pkl found. Train first!")
             sys.exit(1)
         
         with open('top_5_genomes.pkl', 'rb') as f:
             top_5_genomes = pickle.load(f)
         
         if not top_5_genomes:
-            print("❌ No genomes saved yet!")
+            print("No genomes saved yet!")
             sys.exit(1)
         
         genome_idx = show_genome_menu(top_5_genomes)
@@ -165,25 +166,49 @@ if __name__ == '__main__':
             sys.exit(0)
         
         fitness, genome = top_5_genomes[genome_idx]
-        print(f"\n✅ Selected Genome #{genome_idx + 1} (Fitness: {fitness:.1f})")
+        print(f"\nSelected Global Genome #{genome_idx + 1} (Fitness: {fitness:.1f})")
         
         num_runs = int(input("Runs (default 3): ").strip() or "3")
         fps = int(input("FPS (default 10): ").strip() or "10")
         replay_genome(genome, config, genome_rank=genome_idx + 1, num_runs=num_runs, fps=fps)
     
     elif choice == '2':
+        # Load top 5 robust genomes
+        if not os.path.exists('top_5_robust_genomes.pkl'):
+            print("No top_5_robust_genomes.pkl found. Train for at least 5 generations!")
+            sys.exit(1)
+        
+        with open('top_5_robust_genomes.pkl', 'rb') as f:
+            top_5_robust_genomes = pickle.load(f)
+        
+        if not top_5_robust_genomes:
+            print("No robust genomes saved yet!")
+            sys.exit(1)
+        
+        genome_idx = show_genome_menu(top_5_robust_genomes)
+        if genome_idx is None:
+            sys.exit(0)
+        
+        fitness, genome = top_5_robust_genomes[genome_idx]
+        print(f"\nSelected Robust Genome #{genome_idx + 1} (Avg Fitness: {fitness:.1f})")
+        
+        num_runs = int(input("Runs (default 3): ").strip() or "3")
+        fps = int(input("FPS (default 10): ").strip() or "10")
+        replay_genome(genome, config, genome_rank=genome_idx + 1, num_runs=num_runs, fps=fps)
+    
+    elif choice == '3':
         # Legacy: Load best_genome.pkl
         if not os.path.exists('best_genome.pkl'):
-            print("❌ No best_genome.pkl found!")
+            print("No best_genome.pkl found!")
             sys.exit(1)
         
         with open('best_genome.pkl', 'rb') as f:
             genome = pickle.load(f)
         
-        print("✅ Loaded best_genome.pkl")
+        print("Loaded best_genome.pkl")
         num_runs = int(input("Runs (default 3): ").strip() or "3")
         fps = int(input("FPS (default 10): ").strip() or "10")
         replay_genome(genome, config, genome_rank=1, num_runs=num_runs, fps=fps)
     
-    elif choice == '3':
+    elif choice == '4':
         sys.exit(0)

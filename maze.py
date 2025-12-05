@@ -11,12 +11,7 @@ class Maze:
         Initialize maze from a string layout.
         
         Args:
-            layout: List of strings representing the maze grid:
-                '1' = wall
-                '0' = empty path
-                'S' = start position
-                'f' = small food
-                'F' = big food
+            layout: List of strings representing the maze grid
             cell_size: Pixel size of each grid cell for rendering
             num_small_food: Number of small food items to spawn
             num_big_food: Number of big food items to spawn
@@ -52,18 +47,31 @@ class Maze:
                     })
         
         if self.start_pos is None:
-            raise ValueError("Maze must have a start position 'S'")
+            walkable = self._get_walkable_cells_for_spawn()
+            if walkable:
+                self.start_pos = random.choice(walkable)
+            else:
+                raise ValueError("Maze has no walkable cells for spawn!")
         
         # If no food in layout, generate random positions
         if len(self.food_items) == 0:
             self._randomize_food_positions()
     
     def _get_walkable_cells(self):
-        """Get all walkable (non-wall) cells."""
+        """Get all walkable (non-wall) cells excluding spawn."""
         walkable = []
         for y in range(1, self.rows - 1):
             for x in range(1, self.cols - 1):
                 if not self.is_wall(x, y) and (x, y) != self.start_pos:
+                    walkable.append((x, y))
+        return walkable
+    
+    def _get_walkable_cells_for_spawn(self):
+        """Get all walkable cells (for spawn position selection)."""
+        walkable = []
+        for y in range(1, self.rows - 1):
+            for x in range(1, self.cols - 1):
+                if not self.is_wall(x, y):
                     walkable.append((x, y))
         return walkable
     
@@ -183,6 +191,14 @@ class Maze:
         """Reset all food items to uneaten state."""
         for food in self.food_items:
             food['eaten'] = False
+    
+    def randomize_spawn(self):
+        """Randomly select a new spawn position."""
+        walkable = self._get_walkable_cells_for_spawn()
+        if walkable:
+            self.start_pos = random.choice(walkable)
+        else:
+            raise ValueError("No walkable cells available for spawn!")
 
 
 # Default maze layout with balanced food distribution
@@ -201,7 +217,7 @@ DEFAULT_MAZE = [
     "10000001000000000000000001",
     "10111111000000001111011111",
     "10100000000000000000000001",
-    "100000000000S0000000000001",
+    "10000000000000000000000001",
     "10100000000000000000000001",
     "10111111000000001111011111",
     "10000001000000001000000001",

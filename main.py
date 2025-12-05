@@ -8,16 +8,18 @@ import pygame
 import pickle
 from simulation import eval_genomes
 
-def run_neat(config_path, num_generations=50, resume=False, headless=False, food_randomize_every=0):
+def run_neat(config_path, num_generations=50, resume=False, headless=False, 
+             food_randomize_every=0, spawn_randomize_every=0):
     """Run NEAT evolution."""
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_path)
     
-    # Set headless mode in simulation module
+    # Set parameters in simulation module
     import simulation
     simulation.HEADLESS = headless
-    simulation.FOOD_RANDOMIZE_EVERY = food_randomize_every 
+    simulation.FOOD_RANDOMIZE_EVERY = food_randomize_every
+    simulation.SPAWN_RANDOMIZE_EVERY = spawn_randomize_every
     
     # Only initialize pygame if not headless
     if not headless:
@@ -140,6 +142,36 @@ def get_food_randomization():
             print("Invalid number")
 
 
+def get_spawn_randomization():
+    """Ask user about spawn randomization."""
+    while True:
+        try:
+            num = input("Randomize spawn every N generations (0=never, default 3): ").strip()
+            if num == '':
+                return 3
+            num = int(num)
+            if num >= 0:
+                return num
+            print("Must be >= 0")
+        except ValueError:
+            print("Invalid number")
+
+
+def get_spawn_randomization():
+    """Ask user about spawn randomization."""
+    while True:
+        try:
+            num = input("Randomize spawn every N generations (0=never, default 3): ").strip()
+            if num == '':
+                return 3
+            num = int(num)
+            if num >= 0:
+                return num
+            print("Must be >= 0")
+        except ValueError:
+            print("Invalid number")
+
+
 if __name__ == '__main__':
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'config-maze.txt')
@@ -153,14 +185,16 @@ if __name__ == '__main__':
     if choice == '1':
         num_gens = get_num_generations()
         food_rand = get_food_randomization()
+        spawn_rand = get_spawn_randomization()
         run_neat(config_path, num_generations=num_gens, resume=False, headless=False, 
-                 food_randomize_every=food_rand)
+                 food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
     
     elif choice == '2':
         num_gens = get_num_generations()
         food_rand = get_food_randomization()
+        spawn_rand = get_spawn_randomization()
         run_neat(config_path, num_generations=num_gens, resume=False, headless=True,
-                 food_randomize_every=food_rand)
+                 food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
     
     elif choice == '3':
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
@@ -168,13 +202,15 @@ if __name__ == '__main__':
             print("\nNo checkpoints")
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
+            spawn_rand = get_spawn_randomization()
             run_neat(config_path, num_generations=num_gens, resume=False, headless=False,
-                     food_randomize_every=food_rand)
+                     food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
         else:
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
+            spawn_rand = get_spawn_randomization()
             run_neat(config_path, num_generations=num_gens, resume=True, headless=False,
-                     food_randomize_every=food_rand)
+                     food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
     
     elif choice == '4':
         checkpoint_files = [f for f in os.listdir('.') if f.startswith('neat-checkpoint-')]
@@ -182,13 +218,15 @@ if __name__ == '__main__':
             print("\nNo checkpoints")
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
+            spawn_rand = get_spawn_randomization()
             run_neat(config_path, num_generations=num_gens, resume=False, headless=True,
-                     food_randomize_every=food_rand)
+                     food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
         else:
             num_gens = get_num_generations()
             food_rand = get_food_randomization()
+            spawn_rand = get_spawn_randomization()
             run_neat(config_path, num_generations=num_gens, resume=True, headless=True,
-                     food_randomize_every=food_rand)
+                     food_randomize_every=food_rand, spawn_randomize_every=spawn_rand)
     
     elif choice == '5':
         sys.exit(0)

@@ -15,20 +15,54 @@ from fitness import compute_fitness
 # Simulation parameters
 MAX_STEPS = 600
 FPS = 30
-HEADLESS = False  # Set to True to disable visualization
+HEADLESS = False
 
 FOOD_RANDOMIZE_EVERY = 3  # Randomize food every N generations (0 = never)
-SAVED_FOOD_POSITIONS = None  # Store food positions
+SPAWN_RANDOMIZE_EVERY = 3  # Randomize spawn every N generations (0 = never)
+SAVED_FOOD_POSITIONS = None
+SAVED_SPAWN_POSITION = None 
 
 # Global tracking
 generation_counter = 0
 global_best_fitness = 0.0
 global_best_genome = None
-top_5_genomes = []  
+top_5_genomes = []  # Top 5 on current config
+top_5_robust_genomes = []  
+
+def test_genome_robustness(genome, config, num_tests=3):
+    """Test genome on multiple random configurations and return average fitness."""
+    total_fitness = 0.0
+    
+    for test in range(num_tests):
+        # Create maze with random food/spawn
+        test_maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
+        test_maze.randomize_food()
+        test_maze.randomize_spawn()
+        
+        # Run agent
+        net = neat.nn.RecurrentNetwork.create(genome, config)
+        net.reset()
+        agent = Agent(test_maze, net, max_steps=MAX_STEPS)
+        
+        for step in range(MAX_STEPS):
+            if not agent.alive:
+                break
+            inputs = agent.get_inputs()
+            output = net.activate(inputs)
+            direction = output.index(max(output))
+            agent.step(direction)
+        
+        # Calculate fitness
+        fitness = compute_fitness(agent, test_maze, generation_counter, None)
+        total_fitness += fitness
+    
+    return total_fitness / num_tests
+
 
 def eval_genomes(genomes, config):
     """Evaluate all genomes by running maze simulation."""
-    global generation_counter, global_best_fitness, global_best_genome, SAVED_FOOD_POSITIONS, top_5_genomes
+    global generation_counter, global_best_fitness, global_best_genome
+    global SAVED_FOOD_POSITIONS, SAVED_SPAWN_POSITION, top_5_genomes, top_5_robust_genomes
     
     gen_start_time = time.time()
     
@@ -36,17 +70,25 @@ def eval_genomes(genomes, config):
     master_maze = Maze(DEFAULT_MAZE, cell_size=20, num_small_food=43, num_big_food=12)
     
     if SAVED_FOOD_POSITIONS is None:
-        # First time: save initial random positions
         SAVED_FOOD_POSITIONS = copy.deepcopy(master_maze.food_items)
-        print(f"\n    💾 Food positions initialized!\n")
+        print(f"\n    Food positions initialized!\n")
     elif FOOD_RANDOMIZE_EVERY > 0 and generation_counter > 0 and generation_counter % FOOD_RANDOMIZE_EVERY == 0:
-        # Regenerate and save new positions
         master_maze.randomize_food()
         SAVED_FOOD_POSITIONS = copy.deepcopy(master_maze.food_items)
-        print(f"\n    🔄 Food positions randomized! (Generation {generation_counter})\n")
+        print(f"\n    Food positions randomized! (Generation {generation_counter})\n")
     else:
-        # Reuse saved positions
         master_maze.food_items = copy.deepcopy(SAVED_FOOD_POSITIONS)
+    
+    # SPAWN RANDOMIZATION
+    if SAVED_SPAWN_POSITION is None:
+        SAVED_SPAWN_POSITION = master_maze.start_pos
+        print(f"    Spawn position initialized: {SAVED_SPAWN_POSITION}\n")
+    elif SPAWN_RANDOMIZE_EVERY > 0 and generation_counter > 0 and generation_counter % SPAWN_RANDOMIZE_EVERY == 0:
+        master_maze.randomize_spawn()
+        SAVED_SPAWN_POSITION = master_maze.start_pos
+        print(f"    Spawn position randomized: {SAVED_SPAWN_POSITION}\n")
+    else:
+        master_maze.start_pos = SAVED_SPAWN_POSITION
     
     # Initialize display (only if not headless)
     screen = None
@@ -198,20 +240,17 @@ def eval_genomes(genomes, config):
             best_genome_this_gen = genome
             best_agent_this_gen = agents[i]
     
+    # ========== TOP 5 GLOBAL (Current Config) ==========
     if best_genome_this_gen:
-        # Check if this genome is already in top 5 (by genome key/id)
         genome_ids_in_top5 = [g.key for _, g in top_5_genomes]
         is_duplicate = best_genome_this_gen.key in genome_ids_in_top5
         
         if not is_duplicate:
-            # Check if this genome deserves to be in top 5
             should_add = False
             
             if len(top_5_genomes) < 5:
-                # List not full yet, always add
                 should_add = True
             else:
-                # Check if better than 5th place
                 fifth_place_fitness = top_5_genomes[4][0]
                 if best_fitness_this_gen > fifth_place_fitness:
                     should_add = True
@@ -221,18 +260,47 @@ def eval_genomes(genomes, config):
                 top_5_genomes.sort(key=lambda x: x[0], reverse=True)
                 top_5_genomes = top_5_genomes[:5]
                 
-                # Save top 5 genomes
                 with open('top_5_genomes.pkl', 'wb') as f:
                     pickle.dump(top_5_genomes, f)
                 
-                print(f"    Added to Top 5! (Fitness: {best_fitness_this_gen:.1f}, ID: {best_genome_this_gen.key})")
+                print(f"    Added to Top 5 Global! (Fitness: {best_fitness_this_gen:.1f}, ID: {best_genome_this_gen.key})")
     
-    # Update global best if this generation is better
+    # ========== TOP 5 ROBUST (Tested on Multiple Configs) ==========
+    if best_genome_this_gen and generation_counter > 0 and generation_counter % 5 == 0:
+        print(f"\n    Testing robustness of best genome...")
+        robust_fitness = test_genome_robustness(best_genome_this_gen, config, num_tests=3)
+        print(f"    Robust fitness (avg of 3 tests): {robust_fitness:.1f}")
+        print(f"    Original fitness: {best_fitness_this_gen:.1f}\n")
+        
+        # Check if should add to robust top 5
+        genome_ids_in_robust = [g.key for _, g in top_5_robust_genomes]
+        is_duplicate_robust = best_genome_this_gen.key in genome_ids_in_robust
+        
+        if not is_duplicate_robust:
+            should_add_robust = False
+            
+            if len(top_5_robust_genomes) < 5:
+                should_add_robust = True
+            else:
+                fifth_place_robust = top_5_robust_genomes[4][0]
+                if robust_fitness > fifth_place_robust:
+                    should_add_robust = True
+            
+            if should_add_robust:
+                top_5_robust_genomes.append((robust_fitness, best_genome_this_gen))
+                top_5_robust_genomes.sort(key=lambda x: x[0], reverse=True)
+                top_5_robust_genomes = top_5_robust_genomes[:5]
+                
+                with open('top_5_robust_genomes.pkl', 'wb') as f:
+                    pickle.dump(top_5_robust_genomes, f)
+                
+                print(f"    Added to Top 5 Robust! (Fitness: {robust_fitness:.1f}, ID: {best_genome_this_gen.key})")
+    
+    # Update global best (use original fitness)
     if best_fitness_this_gen > global_best_fitness:
         global_best_fitness = best_fitness_this_gen
         global_best_genome = best_genome_this_gen
         
-        # Save best genome (backward compatibility)
         with open('best_genome.pkl', 'wb') as f:
             pickle.dump(global_best_genome, f)
         
